@@ -122,7 +122,6 @@ namespace Lemegeton.Content
         {
             private readonly CelestriadTracker tracker = new();
             private bool soft;
-            private readonly HashSet<(uint Actor, int Bind)> applied = new();
             public override FeaturesEnum Features => base.Features | FeaturesEnum.Experimental;
 
             public CelestriadAM(State state) : base(state)
@@ -131,13 +130,7 @@ namespace Lemegeton.Content
                 tracker.Apply = (actor, bind) =>
                 {
                     if (SelfMarkOnly && state.ot.LocalPlayer?.GameObjectId != actor) return true;
-                    if (!state.UpdateScopedBind(actor, bind, soft, false)) return false;
-                    applied.Add((actor, bind));
-                    return true;
-                };
-                tracker.Clear = (actor, bind) =>
-                {
-                    if (applied.Remove((actor, bind))) state.UpdateScopedBind(actor, bind, soft, true);
+                    return state.TryAssignScopedBind(actor, bind, soft);
                 };
                 OnActiveChanged += active => { if (!active) Reset(); };
             }

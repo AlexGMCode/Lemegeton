@@ -11,18 +11,14 @@ namespace Lemegeton.Core
         internal static bool IsElement(uint status) => status == 0xB56 || status == 0xBB6 || status == 0xB57;
         private uint[] party = Array.Empty<uint>();
         private readonly Dictionary<uint, uint> recipients = new();
-        private readonly List<(uint Actor, int Sign)> owned = new();
-        private long deadline, clearAt, settleAt;
+        private long deadline, settleAt;
         private bool collecting;
-        internal Action<uint, int> Clear { get; set; } = (_, _) => { };
         internal Func<uint, int, bool> Apply { get; set; } = (_, _) => false;
 
         internal void Reset()
         {
             collecting = false;
             recipients.Clear();
-            foreach (var mark in owned) Clear(mark.Actor, mark.Sign);
-            owned.Clear();
             party = Array.Empty<uint>();
             // Keep the cast lockout: a delayed duplicate must not reopen a cancelled window.
         }
@@ -40,9 +36,6 @@ namespace Lemegeton.Core
 
         internal void Status(uint actor, uint status, bool gained, long now)
         {
-            if (owned.Count > 0 && gained && IsElement(status) && party.Contains(actor) &&
-                (!recipients.TryGetValue(actor, out uint assignedStatus) || assignedStatus != status))
-            { Reset(); return; }
             if (!collecting || now >= deadline || !IsElement(status) || !party.Contains(actor)) return;
             if (!gained || (recipients.TryGetValue(actor, out uint previous) && previous != status))
             {
@@ -56,9 +49,6 @@ namespace Lemegeton.Core
         internal void Tick(IEnumerable<uint> members, IReadOnlyDictionary<uint, uint> liveElements, long now, bool enabled)
         {
             if (!enabled || !party.SequenceEqual(members.OrderBy(x => x))) { Reset(); return; }
-            if (owned.Count > 0 && liveElements.Keys.Any(x => party.Contains(x) && !recipients.ContainsKey(x)))
-            { Reset(); return; }
-            if (owned.Count > 0 && now >= clearAt) { Reset(); return; }
             if (!collecting) return;
             if (now >= deadline) { Reset(); return; }
             if (recipients.Count != 6 || now < settleAt) return;
@@ -66,12 +56,11 @@ namespace Lemegeton.Core
             if (liveElements.Count != 6 || recipients.Any(x => !liveElements.TryGetValue(x.Key, out uint s) || s != x.Value)) return;
             collecting = false;
             uint[] unaffected = party.Where(x => !recipients.ContainsKey(x)).ToArray();
-            clearAt = now + 10000;
-            deadline = Math.Max(deadline, clearAt);
+            // Duplicate-cast lockout only; markers are cleared manually in game.
+            deadline = Math.Max(deadline, now + 10000);
             for (int i = 0; i < 2; i++)
             {
-                if (Apply(unaffected[i], i + 1)) owned.Add((unaffected[i], i + 1));
-                else { Reset(); return; } // Roll back a partial assignment, without touching other signs.
+                if (!Apply(unaffected[i], i + 1)) { Reset(); return; }
             }
         }
     }

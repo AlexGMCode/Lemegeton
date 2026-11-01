@@ -7,7 +7,5 @@ namespace Lemegeton.Core
     {
         internal static bool CanAssign(ulong actor, ulong holder, IEnumerable<ulong> markedActors) =>
             actor != 0 && actor != 0xE0000000 && (holder == 0 || holder == 0xE0000000) && !markedActors.Contains(actor);
-
-        internal static bool CanRemove(ulong actor, ulong holder) => actor != 0 && actor == holder;
     }
 }

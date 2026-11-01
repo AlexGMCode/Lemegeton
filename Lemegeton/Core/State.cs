@@ -1659,9 +1659,8 @@ namespace Lemegeton.Core
             return null;
         }
 
-        // Called on the framework thread only. Scoped markers never enter the deferred
-        // queues: a cancelled encounter cannot leave a pending assignment or removal.
-        internal bool UpdateScopedBind(uint actor, int bind, bool soft, bool remove)
+        // Assignment only, on the framework thread; Celestriad clearing is manual.
+        internal bool TryAssignScopedBind(uint actor, int bind, bool soft)
         {
             if (bind != 1 && bind != 2) return false;
             var sign = bind == 1 ? AutomarkerSigns.SignEnum.Bind1 : AutomarkerSigns.SignEnum.Bind2;
@@ -1669,13 +1668,6 @@ namespace Lemegeton.Core
             if (soft)
             {
                 SoftMarkers.TryGetValue(sign, out ulong holder);
-                if (remove)
-                {
-                    if (!ScopedMarkerRules.CanRemove(actor, holder)) return false;
-                    SoftMarkers[sign] = 0;
-                    AddMarkerHistory(null, null, true, sign);
-                    return true;
-                }
                 if (!cfg.QuickToggleOverlays || !ScopedMarkerRules.CanAssign(actor, holder, SoftMarkers.Values)) return false;
                 var go = GetActorById(actor);
                 if (go == null) return false;
@@ -1684,28 +1676,19 @@ namespace Lemegeton.Core
             }
             else
             {
-                // The authoritative controller table is required to avoid overwriting or
-                // clearing somebody else's marker. Command-only mode cannot provide this.
-                if (!StatusMarkingFuncAvailable || (!remove && cfg.AutomarkerCommands) || _markingFuncPtr == null ||
+                // Read the controller table to avoid overwriting existing signs/targets.
+                if (!StatusMarkingFuncAvailable || cfg.AutomarkerCommands || _markingFuncPtr == null ||
                     !_sigs.TryGetValue("MarkingCtrl", out nint ctrl) || ctrl == 0) return false;
                 int index = AutomarkerSigns.GetSignIndex(sign);
                 uint holder = unchecked((uint)Marshal.ReadInt32(ctrl + 8 * (1 + index)));
-                if (remove)
-                {
-                    if (!ScopedMarkerRules.CanRemove(actor, holder)) return false;
-                }
-                else
-                {
-                    var markedActors = Enumerable.Range(1, 17).Select(i =>
-                        (ulong)unchecked((uint)Marshal.ReadInt32(ctrl + 8 * (1 + i))));
-                    if (!cfg.QuickToggleAutomarkers || !ScopedMarkerRules.CanAssign(actor, holder, markedActors)) return false;
-                    if (GetActorById(actor) == null) return false;
-                }
-                // Reassigning the same sign to its holder removes it (existing ClearMarkerOn convention).
+                var markedActors = Enumerable.Range(1, 17).Select(i =>
+                    (ulong)unchecked((uint)Marshal.ReadInt32(ctrl + 8 * (1 + i))));
+                if (!cfg.QuickToggleAutomarkers || !ScopedMarkerRules.CanAssign(actor, holder, markedActors)) return false;
+                if (GetActorById(actor) == null) return false;
                 _markingFuncPtr(ctrl, (byte)index, actor);
-                if (!remove) _markersApplied = true;
+                _markersApplied = true;
             }
-            if (!remove) cfg.AutomarkersServed++;
+            cfg.AutomarkersServed++;
             return true;
         }
 
