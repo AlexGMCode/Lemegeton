@@ -1,4 +1,4 @@
-﻿using Dalamud.Bindings.ImGui;
+using Dalamud.Bindings.ImGui;
 using Dalamud.Game.ClientState.Objects.Types;
 using Lemegeton.Core;
 using System;
@@ -83,6 +83,7 @@ namespace Lemegeton.Content
         private UltimaBlasterAM _ultimaBlasterAm;
         private BlackHoleAM _blackHoleAM;
         private KefkaSaysAM _kefkaSaysAM;
+        private CelestriadAM _celestriadAm;
 #if !SANS_GOETIA
         private DrawCleaves _drawCleaves;
         private DrawUltimaBlasterLimitCut _ultimaBlasterLc;
@@ -114,6 +115,68 @@ namespace Lemegeton.Content
                     Log(State.LogLevelEnum.Debug, null, "Moving to phase {0}", value);
                     _CurrentPhase = value;
                 }
+            }
+        }
+
+        public class CelestriadAM : Automarker
+        {
+            private readonly CelestriadTracker tracker = new();
+            private bool soft;
+            private readonly HashSet<(uint Actor, int Bind)> applied = new();
+            public override FeaturesEnum Features => base.Features | FeaturesEnum.Experimental;
+
+            public CelestriadAM(State state) : base(state)
+            {
+                Enabled = false;
+                tracker.Apply = (actor, bind) =>
+                {
+                    if (SelfMarkOnly && state.ot.LocalPlayer?.GameObjectId != actor) return true;
+                    if (!state.UpdateScopedBind(actor, bind, soft, false)) return false;
+                    applied.Add((actor, bind));
+                    return true;
+                };
+                tracker.Clear = (actor, bind) =>
+                {
+                    if (applied.Remove((actor, bind))) state.UpdateScopedBind(actor, bind, soft, true);
+                };
+                OnActiveChanged += active => { if (!active) Reset(); };
+            }
+
+            public override void Reset() => tracker.Reset();
+
+            internal void Begin(uint action, float castTime)
+            {
+                if (!Active) return;
+                bool nextSoft = AsSoftmarker || _state.cfg.AutomarkerSoft;
+                if (soft != nextSoft) Reset();
+                soft = nextSoft;
+                tracker.Begin(action, Members(), Environment.TickCount64, castTime);
+            }
+
+            private uint[] Members() => _state.GetPartyMembers().Members.Select(x => (uint)x.ObjectId).ToArray();
+
+            internal void Status(uint actor, uint status, bool gained) =>
+                tracker.Status(actor, status, gained, Environment.TickCount64);
+
+            internal void Tick()
+            {
+                var live = new Dictionary<uint, uint>();
+                var party = _state.GetPartyMembers();
+                foreach (var member in party.Members)
+                {
+                    if (member.GameObject is not IBattleChara character) continue;
+                    foreach (var status in character.StatusList)
+                        if (CelestriadTracker.IsElement(status.StatusId))
+                        {
+                            uint actor = (uint)member.ObjectId;
+                            if (live.TryGetValue(actor, out uint previous) && previous != status.StatusId)
+                            { Reset(); return; }
+                            live[actor] = status.StatusId;
+                        }
+                }
+                bool enabled = Active && soft == (AsSoftmarker || _state.cfg.AutomarkerSoft) &&
+                    (soft ? _state.cfg.QuickToggleOverlays : _state.cfg.QuickToggleAutomarkers);
+                tracker.Tick(party.Members.Select(x => (uint)x.ObjectId), live, Environment.TickCount64, enabled);
             }
         }
 
@@ -2173,6 +2236,7 @@ namespace Lemegeton.Content
         public UltDancingMad(State st) : base(st)
         {
             st.OnZoneChange += OnZoneChange;
+            st.OnUninitialize += () => { Reset(); UnsubscribeFromEvents(); };
         }
 
         protected override bool ExecutionImplementation()
@@ -2198,7 +2262,17 @@ namespace Lemegeton.Content
                 _state.OnHeadMarker += OnHeadMarker;
                 _state.OnAction += OnAction;
                 _state.OnStatusChange += OnStatusChange;
+                _state.fw.Update += OnCelestriadUpdate;
+                _state.OnDirectorUpdate += OnCelestriadDirectorUpdate;
             }
+        }
+
+        private void OnCelestriadUpdate(Dalamud.Plugin.Services.IFramework framework) => _celestriadAm?.Tick();
+
+        private void OnCelestriadDirectorUpdate(uint param1, uint param2, uint param3, uint param4)
+        {
+            if (param2 == (uint)NetworkDecoder.DirectorTypeEnum.Init ||
+                param2 == (uint)NetworkDecoder.DirectorTypeEnum.FadeOut) _celestriadAm.Reset();
         }
 
         private void OnAction(uint src, uint dest, ushort actionId)
@@ -2267,6 +2341,7 @@ namespace Lemegeton.Content
 
         private void OnCastBegin(uint src, uint dest, ushort actionId, float castTime, float rotation)
         {
+            if (actionId == CelestriadTracker.Cast) _celestriadAm.Begin(actionId, castTime);
             switch (actionId)
             {
                 case AbilityForsaken:
@@ -2318,6 +2393,7 @@ namespace Lemegeton.Content
 
         private void OnStatusChange(uint src, uint dest, uint statusId, bool gained, float duration, int stacks)
         {
+            if (CelestriadTracker.IsElement(statusId)) _celestriadAm.Status(dest, statusId, gained);
             switch (statusId)
             {
                 case StatusDoubleTroubleTrap:
@@ -2393,6 +2469,8 @@ namespace Lemegeton.Content
                 _state.OnHeadMarker -= OnHeadMarker;
                 _state.OnCastBegin -= OnCastBegin;
                 _state.OnStatusChange -= OnStatusChange;
+                _state.fw.Update -= OnCelestriadUpdate;
+                _state.OnDirectorUpdate -= OnCelestriadDirectorUpdate;
                 _subbed = false;
             }
         }
@@ -2425,6 +2503,7 @@ namespace Lemegeton.Content
                 _ultimaBlasterAm = (UltimaBlasterAM)Items["UltimaBlasterAM"];
                 _blackHoleAM = (BlackHoleAM)Items["BlackHoleAM"];
                 _kefkaSaysAM = (KefkaSaysAM)Items["KefkaSaysAM"];
+                _celestriadAm = (CelestriadAM)Items["CelestriadAM"];
 #if !SANS_GOETIA
                 _drawCleaves = (DrawCleaves)Items["DrawCleaves"];
                 _ultimaBlasterLc = (DrawUltimaBlasterLimitCut)Items["DrawUltimaBlasterLimitCut"];
@@ -2436,6 +2515,8 @@ namespace Lemegeton.Content
             }
             else if (newZoneOk == false && ZoneOk == true)
             {
+                Reset();
+                UnsubscribeFromEvents();
                 Log(State.LogLevelEnum.Info, null, "Content unavailable");
                 _state.OnCombatChange -= OnCombatChange;
             }
