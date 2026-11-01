@@ -1,4 +1,4 @@
-﻿using Dalamud.Bindings.ImGui;
+using Dalamud.Bindings.ImGui;
 using Dalamud.Game;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Objects;
@@ -821,6 +821,8 @@ namespace Lemegeton.Core
 
         public void Uninitialize()
         {
+            OnUninitialize?.Invoke();
+            OnUninitialize = null;
             if (gn != null)
             {
                 if (_listening == true)
@@ -1656,6 +1658,41 @@ namespace Lemegeton.Core
             }            
             return null;
         }
+
+        // Assignment only, on the framework thread; Celestriad clearing is manual.
+        internal bool TryAssignScopedBind(uint actor, int bind, bool soft)
+        {
+            if (bind != 1 && bind != 2) return false;
+            var sign = bind == 1 ? AutomarkerSigns.SignEnum.Bind1 : AutomarkerSigns.SignEnum.Bind2;
+            if (cfg.DebugOnlyLogAutomarkers) return false;
+            if (soft)
+            {
+                SoftMarkers.TryGetValue(sign, out ulong holder);
+                if (!cfg.QuickToggleOverlays || !ScopedMarkerRules.CanAssign(actor, holder, SoftMarkers.Values)) return false;
+                var go = GetActorById(actor);
+                if (go == null) return false;
+                SoftMarkers[sign] = actor;
+                AddMarkerHistory(null, go, true, sign);
+            }
+            else
+            {
+                // Read the controller table to avoid overwriting existing signs/targets.
+                if (!StatusMarkingFuncAvailable || cfg.AutomarkerCommands || _markingFuncPtr == null ||
+                    !_sigs.TryGetValue("MarkingCtrl", out nint ctrl) || ctrl == 0) return false;
+                int index = AutomarkerSigns.GetSignIndex(sign);
+                uint holder = unchecked((uint)Marshal.ReadInt32(ctrl + 8 * (1 + index)));
+                var markedActors = Enumerable.Range(1, 17).Select(i =>
+                    (ulong)unchecked((uint)Marshal.ReadInt32(ctrl + 8 * (1 + i))));
+                if (!cfg.QuickToggleAutomarkers || !ScopedMarkerRules.CanAssign(actor, holder, markedActors)) return false;
+                if (GetActorById(actor) == null) return false;
+                _markingFuncPtr(ctrl, (byte)index, actor);
+                _markersApplied = true;
+            }
+            cfg.AutomarkersServed++;
+            return true;
+        }
+
+        internal event System.Action OnUninitialize;
 
         internal void ClearAutoMarkers()
         {

@@ -41,15 +41,15 @@
 
   <ItemGroup>
     <Reference Include="Dalamud">
-      <HintPath>C:\Users\Moskau\AppData\Roaming\XIVLauncher\addon\Hooks\dev\Dalamud.dll</HintPath>
+      <HintPath>$(DalamudLibPath)Dalamud.dll</HintPath>
 	  <Private>false</Private>
     </Reference>
     <Reference Include="FFXIVClientStructs">
-      <HintPath>C:\Users\Moskau\AppData\Roaming\XIVLauncher\addon\Hooks\dev\FFXIVClientStructs.dll</HintPath>
+      <HintPath>$(DalamudLibPath)FFXIVClientStructs.dll</HintPath>
 	  <Private>false</Private>
     </Reference>
     <Reference Include="InteropGenerator.Runtime">
-      <HintPath>C:\Users\Moskau\AppData\Roaming\XIVLauncher\addon\Hooks\dev\InteropGenerator.Runtime.dll</HintPath>
+      <HintPath>$(DalamudLibPath)InteropGenerator.Runtime.dll</HintPath>
 	  <Private>false</Private>
     </Reference>
     <Reference Include="Newtonsoft.Json">

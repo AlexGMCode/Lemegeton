@@ -1,4 +1,4 @@
-﻿using Lemegeton.Core;
+using Lemegeton.Core;
 using static Lemegeton.Content.UltDancingMad;
 
 namespace Lemegeton.Language
@@ -34,6 +34,10 @@ namespace Lemegeton.Language
             AddEntry("Changelog/1.0.8.1", " Added automarkers for UMAD");
             AddEntry("Content/Ultimate/UltDancingMad", "Dancing Mad (Ultimate)");
             AddEntry("Content/Ultimate/UltDancingMad/Enabled", "Enabled");
+            AddEntry("Content/Ultimate/UltDancingMad/CelestriadAM", "Celestriad automarker (Bind 1/2)");
+            AddEntry("Content/Ultimate/UltDancingMad/CelestriadAM/Enabled", "Enabled");
+            AddEntry("Content/Ultimate/UltDancingMad/CelestriadAM/SelfMarkOnly", "Self-marking only");
+            AddEntry("Content/Ultimate/UltDancingMad/CelestriadAM/AsSoftmarker", "Show as client-side soft markers");
             AddEntry("Content/Ultimate/UltDancingMad/DoubleTroubleAM", "(P1) Double-trouble Trap automarker");
             AddEntry("Content/Ultimate/UltDancingMad/DoubleTroubleAM/Enabled", "Enabled");
             AddEntry("Content/Ultimate/UltDancingMad/DoubleTroubleAM/SelfMarkOnly", "Self-marking only");

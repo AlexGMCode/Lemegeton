@@ -1,0 +1,29 @@
+name: Celestriad combat simulations
+on:
+  push:
+    paths:
+      - 'Lemegeton/Core/CelestriadTracker.cs'
+      - 'Lemegeton/Core/ScopedMarkerRules.cs'
+      - 'Lemegeton/Content/UltDancingMad.cs'
+      - 'Lemegeton/Core/State.cs'
+      - 'tests/Celestriad.Tests/**'
+      - '.github/workflows/celestriad-tests.yml'
+  pull_request:
+    paths:
+      - 'Lemegeton/Core/CelestriadTracker.cs'
+      - 'Lemegeton/Core/ScopedMarkerRules.cs'
+      - 'Lemegeton/Content/UltDancingMad.cs'
+      - 'Lemegeton/Core/State.cs'
+      - 'tests/Celestriad.Tests/**'
+      - '.github/workflows/celestriad-tests.yml'
+permissions:
+  contents: read
+jobs:
+  simulate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: dotnet run --project tests/Celestriad.Tests/Celestriad.Tests.csproj --configuration Release
